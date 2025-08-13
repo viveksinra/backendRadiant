@@ -6,6 +6,8 @@ router.get('/', (req, res) => {
 	res.json({ message: 'API base', variant: 'success', myData: { path: req.path } });
 });
 
+router.use('/admin/permissions', require('./admin.permissions'));
+
 module.exports = router;
 
 

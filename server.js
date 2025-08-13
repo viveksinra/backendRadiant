@@ -13,6 +13,7 @@ app.use(cors());
 app.use(express.json());
 app.use(morgan('dev'));
 app.use(require('./middlewares/responseEnvelope'));
+app.use(require('./middlewares/audit'));
 
 // Standard response helper
 function envelope(res, { message = 'ok', variant = 'success', myData = null, status = 200 }) {
