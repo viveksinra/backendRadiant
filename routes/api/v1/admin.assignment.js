@@ -1,5 +1,6 @@
 const { Router } = require('express');
-const Employee = require('../../models/Employee');
+const Employee = require('../../../models/Employee');
+const Assignment = require('../../../models/Assignment');
 
 const router = Router();
 
@@ -12,7 +13,7 @@ router.post('/loan/applications/:id/assign/auto', async (req, res) => {
 		if (!employees.length) return res.errorEnvelope('No employees available', 400);
 		roundRobinIndex = (roundRobinIndex + 1) % employees.length;
 		const assignee = employees[roundRobinIndex];
-		// In a full system, update Assignment/LoanApplication here
+		await Assignment.create({ resourceType: 'LoanApplication', resourceId: req.params.id, assignee: assignee._id, reason: 'auto' });
 		return res.success({ applicationId: req.params.id, assignedTo: assignee }, 'ASSIGNED');
 	} catch (err) {
 		return res.errorEnvelope('Assignment failed', 500, { error: err.message });

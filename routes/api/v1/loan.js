@@ -6,6 +6,7 @@ const router = Router();
 
 router.use(auth);
 
+// POST /api/v1/loan/applications
 router.post('/applications', async (req, res) => {
 	if (!req.user) return res.errorEnvelope('Unauthorized', 401);
 	const { loanTypeId, amount = 0 } = req.body || {};
@@ -13,6 +14,7 @@ router.post('/applications', async (req, res) => {
 	return res.success(app.toObject(), 'application created');
 });
 
+// GET /api/v1/loan/applications/:id
 router.get('/applications/:id', async (req, res) => {
 	if (!req.user) return res.errorEnvelope('Unauthorized', 401);
 	const app = await LoanApplication.findById(req.params.id).lean();
@@ -20,6 +22,7 @@ router.get('/applications/:id', async (req, res) => {
 	return res.success(app, 'application');
 });
 
+// PUT /api/v1/loan/applications/:id/questionnaire
 router.put('/applications/:id/questionnaire', async (req, res) => {
 	if (!req.user) return res.errorEnvelope('Unauthorized', 401);
 	const { questionnaire = {} } = req.body || {};
@@ -32,6 +35,7 @@ router.put('/applications/:id/questionnaire', async (req, res) => {
 	return res.success(app, 'questionnaire updated');
 });
 
+// GET /api/v1/loan/applications/:id/status
 router.get('/applications/:id/status', async (req, res) => {
 	if (!req.user) return res.errorEnvelope('Unauthorized', 401);
 	const app = await LoanApplication.findById(req.params.id).lean();

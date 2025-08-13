@@ -1,6 +1,6 @@
 const { Router } = require('express');
 const crypto = require('crypto');
-const Document = require('../../models/Document');
+const Document = require('../../../models/Document');
 
 const router = Router();
 

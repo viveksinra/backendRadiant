@@ -7,10 +7,25 @@ const rbac = require('../../../middlewares/rbac');
 
 const router = Router();
 
-// Create lead
+function isAdminUser(user) {
+    if (!user) return false;
+    const perms = new Set(user.permissions || []);
+    return perms.has('admin:read') || perms.has('admin:write');
+}
+
+// Create lead (dedupe by phone within time window)
 router.post('/', rbac(['lead:create']), async (req, res) => {
 	try {
 		const payload = req.body || {};
+        const { phone } = payload;
+        if (phone) {
+            const windowDays = Number(process.env.LEAD_DEDUPE_WINDOW_DAYS || 30);
+            const since = new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000);
+            const dup = await Lead.findOne({ phone, createdAt: { $gte: since }, isDeleted: { $ne: true } }).lean();
+            if (dup) {
+                return res.errorEnvelope('Duplicate lead (recent phone)', 409, { duplicateLeadId: dup._id });
+            }
+        }
 		const lead = await Lead.create(payload);
 		await InteractionLog.create({
 			lead: lead._id,
@@ -27,11 +42,13 @@ router.post('/', rbac(['lead:create']), async (req, res) => {
 
 // List leads
 router.get('/', rbac(['lead:read']), async (req, res) => {
-	const { assignedTo, sort, limit = 20, page = 1 } = req.query;
-	const q = { isDeleted: { $ne: true } };
-	if (assignedTo === 'me' && req.user?.employeeId) {
-		q.assignedTo = new mongoose.Types.ObjectId(req.user.employeeId);
-	}
+    const { assignedTo, sort, limit = 20, page = 1 } = req.query;
+    const q = { isDeleted: { $ne: true } };
+    if (!isAdminUser(req.user) && req.user?.employeeId) {
+        q.assignedTo = new mongoose.Types.ObjectId(req.user.employeeId);
+    } else if (assignedTo === 'me' && req.user?.employeeId) {
+        q.assignedTo = new mongoose.Types.ObjectId(req.user.employeeId);
+    }
 	const sortSpec = sort === 'score' ? { score: -1, updatedAt: -1 } : { updatedAt: -1 };
 	const results = await Lead.find(q)
 		.sort(sortSpec)
@@ -43,20 +60,27 @@ router.get('/', rbac(['lead:read']), async (req, res) => {
 
 // Get lead by id
 router.get('/:id', rbac(['lead:read']), async (req, res) => {
-	const lead = await Lead.findById(req.params.id).lean();
-	if (!lead) return res.errorEnvelope('Lead not found', 404);
-	return res.success(lead, 'lead');
+    const lead = await Lead.findById(req.params.id).lean();
+    if (!lead) return res.errorEnvelope('Lead not found', 404);
+    if (!isAdminUser(req.user) && req.user?.employeeId && String(lead.assignedTo) !== String(req.user.employeeId)) {
+        return res.errorEnvelope('Forbidden', 403);
+    }
+    return res.success(lead, 'lead');
 });
 
 // Update lead
 router.put('/:id', rbac(['lead:update']), async (req, res) => {
 	try {
-		const updated = await Lead.findByIdAndUpdate(
+        const existing = await Lead.findById(req.params.id);
+        if (!existing) return res.errorEnvelope('Lead not found', 404);
+        if (!isAdminUser(req.user) && req.user?.employeeId && String(existing.assignedTo) !== String(req.user.employeeId)) {
+            return res.errorEnvelope('Forbidden', 403);
+        }
+        const updated = await Lead.findByIdAndUpdate(
 			req.params.id,
 			{ $set: req.body },
 			{ new: true }
 		).lean();
-		if (!updated) return res.errorEnvelope('Lead not found', 404);
 		await InteractionLog.create({
 			lead: updated._id,
 			employee: null,

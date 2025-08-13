@@ -55,14 +55,9 @@ require('./models/Document');
 require('./models/WebhookEvent');
 require('./models/CommsLog');
 require('./models/CustomerProfile');
-require('./models/Document');
-require('./models/KycRecord');
 require('./models/LoanApplication');
 require('./models/Lender');
 require('./models/Offer');
-require('./models/LoanApplication');
-require('./models/Assignment');
-require('./models/Document');
 require('./models/Notification');
 
 connectToMongoWithRetry()

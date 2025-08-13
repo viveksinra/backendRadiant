@@ -1,10 +1,11 @@
 const { Router } = require('express');
-const WebhookEvent = require('../../models/WebhookEvent');
-const { replay, runPendingBatch } = require('../../services/webhookDispatcher');
+const WebhookEvent = require('../../../models/WebhookEvent');
+const { replay, runPendingBatch } = require('../../../services/webhookDispatcher');
+const rbac = require('../../../middlewares/rbac');
 
 const router = Router();
 
-router.get('/', async (req, res) => {
+router.get('/', rbac(['admin:read']), async (req, res) => {
 	const { status = 'dlq', limit = 50, page = 1 } = req.query;
 	const q = { status };
 	const docs = await WebhookEvent.find(q)
@@ -15,7 +16,7 @@ router.get('/', async (req, res) => {
 	return res.success({ items: docs });
 });
 
-router.post('/:id/replay', async (req, res) => {
+router.post('/:id/replay', rbac(['admin:write']), async (req, res) => {
 	try {
 		await replay(req.params.id);
 		await runPendingBatch(1);

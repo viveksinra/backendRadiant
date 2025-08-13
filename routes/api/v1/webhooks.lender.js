@@ -29,7 +29,7 @@ module.exports = router;
 
 const { Router } = require('express');
 const crypto = require('crypto');
-const { enqueue } = require('../../services/webhookDispatcher');
+const { enqueue } = require('../../../services/webhookDispatcher');
 
 const router = Router();
 

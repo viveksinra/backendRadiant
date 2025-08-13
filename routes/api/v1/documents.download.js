@@ -1,7 +1,7 @@
 const { Router } = require('express');
 const sharp = require('sharp');
 const mongoose = require('mongoose');
-const Document = require('../../models/Document');
+const Document = require('../../../models/Document');
 
 const router = Router();
 
