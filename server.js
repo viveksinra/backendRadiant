@@ -6,6 +6,7 @@ require('dotenv').config();
 
 const config = require('./config');
 const { connectToMongoWithRetry } = require('./services/mongo');
+const { runPendingBatch } = require('./services/webhookDispatcher');
 const app = express();
 
 // Middlewares
@@ -14,6 +15,8 @@ app.use(express.json());
 app.use(morgan('dev'));
 app.use(require('./middlewares/responseEnvelope'));
 app.use(require('./middlewares/audit'));
+// Apply PII masking for agents by default
+app.use(require('./middlewares/piiMask')({ fields: ['pan', 'aadhaar'], maskForRoles: ['agent'] }));
 
 // Standard response helper
 function envelope(res, { message = 'ok', variant = 'success', myData = null, status = 200 }) {
@@ -46,11 +49,30 @@ require('./models/Permission');
 require('./models/LoanType');
 require('./models/User');
 require('./models/Employee');
+require('./models/Consent');
+require('./models/KycRecord');
+require('./models/Document');
+require('./models/WebhookEvent');
+require('./models/CommsLog');
+require('./models/CustomerProfile');
+require('./models/Document');
+require('./models/KycRecord');
+require('./models/LoanApplication');
+require('./models/Lender');
+require('./models/Offer');
+require('./models/LoanApplication');
+require('./models/Assignment');
+require('./models/Document');
+require('./models/Notification');
 
 connectToMongoWithRetry()
 	.then(() => {
 		console.log('Mongo connected');
 		app.listen(PORT, () => console.log(`Backend running on :${PORT}`));
+		// lightweight dispatcher loop
+		setInterval(() => {
+			runPendingBatch().catch(() => {});
+		}, 5000);
 	})
 	.catch((err) => {
 		console.error('Mongo connection error', err);

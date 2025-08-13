@@ -1,3 +1,41 @@
+const mongoose = require('mongoose');
+require('dotenv').config();
+const config = require('../config');
+const Role = require('../models/Role');
+const Permission = require('../models/Permission');
+const LoanType = require('../models/LoanType');
+
+async function main() {
+	await mongoose.connect(config.mongoUri);
+	const perms = [
+		{ key: 'admin:read', description: 'Read admin data' },
+		{ key: 'kyc:verify', description: 'Verify KYC' },
+	];
+	for (const p of perms) {
+		await Permission.updateOne({ key: p.key }, { $setOnInsert: p }, { upsert: true });
+	}
+	const adminRole = await Role.findOneAndUpdate(
+		{ name: 'admin' },
+		{ $setOnInsert: { name: 'admin', description: 'Administrator' } },
+		{ upsert: true, new: true }
+	);
+	const baseLoanTypes = [
+		{ name: 'Personal Loan', code: 'PL' },
+		{ name: 'Home Loan', code: 'HL' },
+		{ name: 'Business Loan', code: 'BL' },
+	];
+	for (const lt of baseLoanTypes) {
+		await LoanType.updateOne({ code: lt.code }, { $setOnInsert: lt }, { upsert: true });
+	}
+	console.log('Seed completed');
+	await mongoose.disconnect();
+}
+
+main().catch((e) => {
+	console.error(e);
+	process.exit(1);
+});
+
 /* eslint-disable no-console */
 const { connectToMongoWithRetry } = require('../services/mongo');
 const Role = require('../models/Role');
