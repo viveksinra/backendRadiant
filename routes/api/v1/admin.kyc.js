@@ -37,6 +37,47 @@ router.get('/queue', rbac([]), async (req, res) => {
 	return res.success(list, 'kyc_queue');
 });
 
+// GET /api/v1/admin/kyc/export -> CSV export (PII redacted unless user has pii:read)
+router.get('/export', rbac(['admin:read']), async (req, res) => {
+	const { limit = 1000 } = req.query || {};
+	const hasPii = (req.user?.permissions || []).includes('pii:read');
+	const mask = (v) => {
+		if (v == null) return '';
+		const s = String(v);
+		if (hasPii) return s;
+		if (s.length <= 4) return '*'.repeat(Math.max(0, s.length - 1)) + s.slice(-1);
+		return s.slice(0, 2) + '*'.repeat(s.length - 6) + s.slice(-4);
+	};
+	const items = await KycRecord.find({ isDeleted: { $ne: true } })
+		.sort({ updatedAt: -1 })
+		.limit(Number(limit))
+		.lean();
+	const header = ['id', 'userId', 'pan', 'aadhaar', 'status', 'updatedAt'];
+	const rows = items.map((k) => [
+		k._id,
+		k.userId || '',
+		mask(k.pan || ''),
+		mask(k.aadhaar || ''),
+		k.status || '',
+		new Date(k.updatedAt).toISOString(),
+	]);
+	const csv = [header.join(',')].concat(rows.map((r) => r.join(','))).join('\n');
+	try {
+		await createAuditLog({
+			actorId: req.user?._id,
+			action: hasPii ? 'REPORT_EXPORTED' : 'EXPORT_REDACTED',
+			resource: '/admin/kyc/export',
+			resourceId: null,
+			ip: req.ip,
+			headerUserAgent: req.get('user-agent') || '',
+			before: { query: req.query },
+			after: { count: items.length },
+		});
+	} catch (_) {}
+	res.setHeader('Content-Type', 'text/csv');
+	return res.status(200).send(csv);
+});
+
 // POST /api/v1/admin/kyc/verify -> mark a KYC record verified
 router.post('/verify', rbac([]), async (req, res) => {
 	const { id } = req.body || {};
@@ -60,7 +101,7 @@ router.post('/verify', rbac([]), async (req, res) => {
 	});
 	// notify user (best-effort)
 	try {
-		await Notification.create({ userId: updated.userId, title: 'KYC verified', body: 'Your KYC has been verified.' });
+		await Notification.create({ user: updated.userId, title: 'KYC verified', body: 'Your KYC has been verified.' });
 	} catch (_) {}
 	return res.success(updated, 'kyc verified');
 });
@@ -87,7 +128,7 @@ router.post('/reject', rbac([]), async (req, res) => {
 		after: updated
 	});
 	try {
-		await Notification.create({ userId: updated.userId, title: 'KYC rejected', body: reason || 'Your KYC has been rejected. Please review and re-upload required documents.' });
+		await Notification.create({ user: updated.userId, title: 'KYC rejected', body: reason || 'Your KYC has been rejected. Please review and re-upload required documents.' });
 	} catch (_) {}
 	return res.success(updated, 'kyc rejected');
 });
@@ -114,7 +155,7 @@ router.post('/request-reupload', rbac([]), async (req, res) => {
 		after: updated
 	});
 	try {
-		await Notification.create({ userId: updated.userId, title: 'Re-upload requested', body: note || 'Please re-upload your KYC documents.' });
+		await Notification.create({ user: updated.userId, title: 'Re-upload requested', body: note || 'Please re-upload your KYC documents.' });
 	} catch (_) {}
 	return res.success(updated, 'reupload requested');
 });
@@ -137,21 +178,21 @@ router.post('/bulk', rbac([]), async (req, res) => {
 				{ $set: { status: 'verified', panStatus: before.pan ? 'verified' : before.panStatus, aadhaarStatus: before.aadhaar ? 'verified' : before.aadhaarStatus } },
 				{ new: true }
 			).lean();
-			try { await Notification.create({ userId: updated.userId, title: 'KYC verified', body: 'Your KYC has been verified.' }); } catch (_) {}
+			try { await Notification.create({ user: updated.userId, title: 'KYC verified', body: 'Your KYC has been verified.' }); } catch (_) {}
 		} else if (action === 'reject') {
 			updated = await KycRecord.findByIdAndUpdate(
 				id,
 				{ $set: { status: 'rejected' }, $push: { reviewNotes: { type: 'reject', reason, at: new Date() } } },
 				{ new: true }
 			).lean();
-			try { await Notification.create({ userId: updated.userId, title: 'KYC rejected', body: reason || 'Your KYC has been rejected. Please review and re-upload required documents.' }); } catch (_) {}
+			try { await Notification.create({ user: updated.userId, title: 'KYC rejected', body: reason || 'Your KYC has been rejected. Please review and re-upload required documents.' }); } catch (_) {}
 		} else if (action === 'requestReupload') {
 			updated = await KycRecord.findByIdAndUpdate(
 				id,
 				{ $set: { status: 'draft' }, $push: { reviewNotes: { type: 'reupload', note, at: new Date() } } },
 				{ new: true }
 			).lean();
-			try { await Notification.create({ userId: updated.userId, title: 'Re-upload requested', body: note || 'Please re-upload your KYC documents.' }); } catch (_) {}
+			try { await Notification.create({ user: updated.userId, title: 'Re-upload requested', body: note || 'Please re-upload your KYC documents.' }); } catch (_) {}
 		}
 		results.push(updated);
 		await createAuditLog({

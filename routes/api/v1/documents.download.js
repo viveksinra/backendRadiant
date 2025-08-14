@@ -2,6 +2,7 @@ const { Router } = require('express');
 const sharp = require('sharp');
 const mongoose = require('mongoose');
 const Document = require('../../../models/Document');
+const { createAuditLog } = require('../../../utils/audit');
 
 const router = Router();
 
@@ -35,9 +36,21 @@ router.get('/:id/download', async (req, res) => {
 		const watermark = `${userLabel} • ${new Date().toISOString()}`;
 		const watermarked = await applyWatermark(baseBuffer, watermark);
 
-		res.setHeader('Content-Type', doc.mimeType || 'image/png');
-		res.setHeader('Content-Disposition', `attachment; filename="${doc.originalName || 'document'}.png"`);
-		return res.status(200).send(watermarked);
+        res.setHeader('Content-Type', doc.mimeType || 'image/png');
+        res.setHeader('Content-Disposition', `attachment; filename="${doc.originalName || 'document'}.png"`);
+        try {
+            await createAuditLog({
+                actorId: req.user?._id,
+                action: 'DOC_DOWNLOADED',
+                resource: `/documents/${id}/download`,
+                resourceId: id,
+                ip: req.ip,
+                headerUserAgent: req.get('user-agent') || '',
+                before: { params: req.params, query: req.query },
+                after: { bytes: watermarked.length },
+            });
+        } catch (_) {}
+        return res.status(200).send(watermarked);
 	} catch (err) {
 		return res.errorEnvelope('Download failed', 500, { error: err.message });
 	}

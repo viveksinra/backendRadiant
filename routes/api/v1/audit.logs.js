@@ -2,6 +2,7 @@ const { Router } = require('express');
 const AuditLog = require('../../../models/AuditLog');
 const rbac = require('../../../middlewares/rbac');
 const crypto = require('crypto');
+const { Parser } = require('json2csv');
 
 const router = Router();
 
@@ -39,6 +40,18 @@ router.get('/validate', rbac(['admin:read']), async (req, res) => {
 		prevHash = log.hash;
 	}
 	return res.success({ valid, checked: logs.length }, 'audit chain validation');
+});
+
+// GET /api/v1/audit/logs/export -> CSV export with basic fields
+router.get('/export', rbac(['admin:read']), async (req, res) => {
+	const limit = Math.min(parseInt(req.query.limit || '1000', 10), 10000);
+	const logs = await AuditLog.find({}).sort({ createdAt: -1 }).limit(limit).lean();
+	const fields = ['createdAt', 'actorId', 'action', 'resource', 'resourceId', 'ip', 'headerUserAgent', 'hash', 'prevHash'];
+	const parser = new Parser({ fields });
+	const csv = parser.parse(logs);
+	res.setHeader('Content-Type', 'text/csv');
+	res.setHeader('Content-Disposition', 'attachment; filename="audit_logs.csv"');
+	return res.status(200).send(csv);
 });
 
 module.exports = router;

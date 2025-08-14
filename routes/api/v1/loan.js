@@ -43,6 +43,18 @@ router.get('/applications/:id/status', async (req, res) => {
 	return res.success({ id: app._id, state: app.state }, 'status');
 });
 
+// POST /api/v1/loan/applications/:id/consent-share -> explicit consent to share with lenders
+router.post('/applications/:id/consent-share', async (req, res) => {
+	if (!req.user) return res.errorEnvelope('Unauthorized', 401);
+	const { consent = false } = req.body || {};
+	if (!consent) return res.errorEnvelope('Consent required', 400);
+	const app = await LoanApplication.findById(req.params.id);
+	if (!app) return res.errorEnvelope('Not found', 404);
+	app.meta = { ...(app.meta || {}), consentShareWithLendersAt: new Date() };
+	await app.save();
+	return res.success({ id: app._id, consentedAt: app.meta.consentShareWithLendersAt }, 'CONSENT_RECORDED');
+});
+
 module.exports = router;
 
 

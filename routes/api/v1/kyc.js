@@ -2,6 +2,9 @@ const { Router } = require('express');
 const auth = require('../../../middlewares/auth');
 const KycRecord = require('../../../models/KycRecord');
 const Document = require('../../../models/Document');
+const config = require('../../../config');
+const { verifyPan } = require('../../../services/adapters/panVerificationAdapter');
+const { verifyAadhaar } = require('../../../services/adapters/aadhaarVerificationAdapter');
 
 const router = Router();
 
@@ -66,5 +69,33 @@ router.post('/submit', async (req, res) => {
 });
 
 module.exports = router;
+
+// POST /api/v1/kyc/verify/pan
+router.post('/verify/pan', async (req, res) => {
+	if (!req.user) return res.errorEnvelope('Unauthorized', 401);
+	if (!config.featureFlags.kycStubsEnabled) return res.errorEnvelope('PAN provider not configured', 503);
+	const { pan = '' } = req.body || {};
+	const result = await verifyPan(pan);
+	const updated = await KycRecord.findOneAndUpdate(
+		{ userId: req.user._id },
+		{ $set: { pan, panStatus: result.status, panMeta: result.meta } },
+		{ new: true, upsert: true }
+	).lean();
+	return res.success(updated, 'PAN_VERIFIED');
+});
+
+// POST /api/v1/kyc/verify/aadhaar
+router.post('/verify/aadhaar', async (req, res) => {
+	if (!req.user) return res.errorEnvelope('Unauthorized', 401);
+	if (!config.featureFlags.kycStubsEnabled) return res.errorEnvelope('Aadhaar provider not configured', 503);
+	const { aadhaar = '' } = req.body || {};
+	const result = await verifyAadhaar(aadhaar);
+	const updated = await KycRecord.findOneAndUpdate(
+		{ userId: req.user._id },
+		{ $set: { aadhaar, aadhaarStatus: result.status, aadhaarMeta: result.meta } },
+		{ new: true, upsert: true }
+	).lean();
+	return res.success(updated, 'AADHAAR_VERIFIED');
+});
 
 

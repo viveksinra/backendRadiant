@@ -3,6 +3,7 @@ const rbac = require('../../../middlewares/rbac');
 const Document = require('../../../models/Document');
 const { enqueueScan } = require('../../../services/avScanService');
 const { getDownloadInfo, getPreviewInfo } = require('../../../services/watermarkService');
+const { createAuditLog } = require('../../../utils/audit');
 
 const router = Router();
 
@@ -27,8 +28,21 @@ router.get('/:id', rbac(['user:read']), async (req, res) => {
 
 router.get('/:id/download', rbac(['user:read']), async (req, res) => {
 	try {
-		const info = await getDownloadInfo(req.params.id, req);
-		return res.success(info, 'download');
+        const info = await getDownloadInfo(req.params.id, req);
+        // explicit audit event for downloads (GET is not captured by default audit middleware)
+        try {
+            await createAuditLog({
+                actorId: req.user?._id,
+                action: 'DOC_DOWNLOADED',
+                resource: `/documents/${req.params.id}/download`,
+                resourceId: req.params.id,
+                ip: req.ip,
+                headerUserAgent: req.get('user-agent') || '',
+                before: { params: req.params, query: req.query },
+                after: info,
+            });
+        } catch (_) {}
+        return res.success(info, 'download');
 	} catch (err) {
 		return res.errorEnvelope(err.message || 'download failed', 400);
 	}
