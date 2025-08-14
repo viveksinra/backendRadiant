@@ -19,7 +19,9 @@ router.post('/multipart/:uploadId/part/:partNumber', async (req, res) => {
 		const { uploadId, partNumber } = req.params;
 		const store = chunkStore.get(uploadId);
 		if (!store) return res.errorEnvelope('Invalid uploadId', 400);
-		const buf = Buffer.isBuffer(req.body) ? req.body : Buffer.from(JSON.stringify(req.body));
+		const { dataBase64 } = req.body || {};
+		if (!dataBase64) return res.errorEnvelope('dataBase64 required', 400);
+		const buf = Buffer.from(dataBase64, 'base64');
 		store.parts.set(Number(partNumber), buf);
 		return res.success({ received: Number(partNumber) });
 	} catch (err) {

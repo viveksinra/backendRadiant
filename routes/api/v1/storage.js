@@ -1,20 +1,5 @@
 const { Router } = require('express');
 const auth = require('../../../middlewares/auth');
-const storage = require('../../../services/objectStorageAdapter');
-
-const router = Router();
-
-router.post('/signed-url', auth, async (req, res) => {
-	const { key, contentType } = req.body || {};
-	if (!key || !contentType) return res.errorEnvelope('key and contentType required', 400);
-	const signed = await storage.getSignedUrl({ key, contentType });
-	return res.success(signed, 'signed url');
-});
-
-module.exports = router;
-
-const { Router } = require('express');
-const auth = require('../../../middlewares/auth');
 
 const router = Router();
 

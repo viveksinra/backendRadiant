@@ -4,6 +4,7 @@ const jwt = require('jsonwebtoken');
 const OtpCode = require('../../../models/OtpCode');
 const User = require('../../../models/User');
 const CommsLog = require('../../../models/CommsLog');
+const RefreshToken = require('../../../models/RefreshToken');
 const otpProvider = require('../../../services/otpProviderAdapter');
 const config = require('../../../config');
 
@@ -35,8 +36,8 @@ router.post('/request', async (req, res) => {
 		{ upsert: true }
 	);
 	await otpProvider.sendOtp(phone, code);
-	await CommsLog.create({ channel: 'otp', templateId: 'otp_login', recipient: phone, variables: { code }, status: 'sent' });
-	return res.success({ ttlSeconds: 300 }, 'OTP sent');
+    await CommsLog.create({ channel: 'otp', templateId: 'otp_login', recipient: phone, variables: { code }, status: 'sent' });
+    return res.success({ ttlSeconds: 300 }, 'OTP_PROVIDER_CALLED');
 });
 
 // POST /api/v1/auth/otp/verify
@@ -60,8 +61,24 @@ router.post('/verify', async (req, res) => {
 	let user = await User.findOne({ phone });
 	if (!user) user = await User.create({ phone });
 
+	const deviceId = req.get('X-Device-Id') || req.get('X-Device-Fingerprint') || req.body?.deviceId || 'unknown';
+	const jti = crypto.randomBytes(16).toString('hex');
 	const token = jwt.sign({ uid: user._id }, config.jwtSecret, { expiresIn: '15m' });
-	const refreshToken = jwt.sign({ uid: user._id, type: 'refresh' }, config.jwtSecret, { expiresIn: '30d' });
+	const refreshPayload = { uid: user._id, type: 'refresh', jti, deviceId };
+	const refreshToken = jwt.sign(refreshPayload, config.jwtSecret, { expiresIn: '30d' });
+
+	// persist hashed refresh token (device-bound)
+	const hash = crypto.createHash('sha256').update(refreshToken).digest('hex');
+	const { exp } = jwt.decode(refreshToken);
+	await RefreshToken.create({
+		userId: user._id,
+		deviceId,
+		jti,
+		tokenHash: hash,
+		expiresAt: new Date(exp * 1000),
+		isRevoked: false,
+	});
+
 	return res.success({ token, refreshToken, user: { id: user._id, phone: user.phone } }, 'OTP verified');
 });
 

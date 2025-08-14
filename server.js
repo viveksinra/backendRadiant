@@ -59,6 +59,7 @@ require('./models/LoanApplication');
 require('./models/Lender');
 require('./models/Offer');
 require('./models/Notification');
+require('./models/RefreshToken');
 
 connectToMongoWithRetry()
 	.then(() => {
