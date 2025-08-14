@@ -2,12 +2,14 @@ const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const morgan = require('morgan');
+const http = require('http');
 require('dotenv').config();
 
 const config = require('./config');
 const { connectToMongoWithRetry } = require('./services/mongo');
 const { runPendingBatch } = require('./services/webhookDispatcher');
 const app = express();
+const { initSocket } = require('./services/socketService');
 
 // Middlewares
 app.use(cors());
@@ -64,7 +66,9 @@ require('./models/RefreshToken');
 connectToMongoWithRetry()
 	.then(() => {
 		console.log('Mongo connected');
-		app.listen(PORT, () => console.log(`Backend running on :${PORT}`));
+		const server = http.createServer(app);
+		server.listen(PORT, () => console.log(`Backend running on :${PORT}`));
+		initSocket(server);
 		// lightweight dispatcher loop
 		setInterval(() => {
 			runPendingBatch().catch(() => {});
@@ -72,7 +76,9 @@ connectToMongoWithRetry()
 	})
 	.catch((err) => {
 		console.error('Mongo connection error', err);
-		app.listen(PORT, () => console.log(`Backend running (without DB) on :${PORT}`));
+		const server = http.createServer(app);
+		server.listen(PORT, () => console.log(`Backend running (without DB) on :${PORT}`));
+		initSocket(server);
 	});
 
 
